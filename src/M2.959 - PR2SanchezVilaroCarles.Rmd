@@ -1,0 +1,388 @@
+---
+title: "M2.959 - PR2SanchezVilaroCarles"
+author: "Carles Vilaro"
+date: "Juny 2025"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Visualització de Dades
+
+## PR2
+
+Càrrega de llibreries.
+
+```{r message= FALSE, warning=FALSE}
+llibreries <- c("knitr",
+                "openxlsx",
+                "dplyr",
+                "ggplot2",
+                "kableExtra",
+                "tidyr")
+
+llibreries_a_instalar <- llibreries[!(llibreries %in% installed.packages()[,"Package"])]
+if(length(llibreries_a_instalar)) install.packages(llibreries_a_instalar)
+
+llibreries_carregades <- lapply(llibreries, library, character.only = TRUE)
+```
+
+Càrrega del conjunt de dades “Comprehensive Food Consumption Database”.
+
+```{r message= FALSE, warning=FALSE}
+food_consumption <- read.xlsx("ESFA_CONSUMPTION_DASHBOARD_FORMAT.xlsx", sheet = 1)
+glimpse(food_consumption)
+```
+
+Procedim a extreure les característiques necessàries per a la visualització. L'exploració del conjunt ja va ser realitzada a la PR1, on es va determinar que no necessita grans tractaments previs, excepte una transformació mínima dels factors i eliminar registres blancs de la categorització 2.
+
+```{r message= FALSE, warning=FALSE}
+food_consumption <- food_consumption %>%
+  mutate(
+    SurveyscountryDESC = as.factor(SurveyscountryDESC),
+    PopulationGroupL2DESC = as.factor(PopulationGroupL2DESC),
+    ExposurehierarchyL1DESC = as.factor(ExposurehierarchyL1DESC),
+    ExposurehierarchyL2DESC = as.factor(ExposurehierarchyL2DESC)
+  ) %>%
+  filter(!is.na(ExposurehierarchyL2DESC) & ExposurehierarchyL2DESC != "")
+```
+
+Agrupem conjunt segons atributs rellevants descrits a la PR1 i filtrem per estats membres.
+
+```{r message= FALSE, warning=FALSE}
+food_consumption <- food_consumption %>%
+  group_by(SurveyscountryDESC, PopulationGroupL2DESC, ExposurehierarchyL1DESC, ExposurehierarchyL2DESC) %>%
+  summarize(median_chronic_summary = median(median_chronic, na.rm = TRUE),
+            avg_chronic_summary = mean(avg_chronic, na.rm = TRUE)) %>%
+  ungroup()
+
+
+eu_countries <- c(
+  "Austria", "Belgium", "Bulgaria", "Croatia", "Cyprus", "Czech Republic", "Denmark", "Estonia", 
+  "Finland", "France", "Germany", "Greece", "Hungary", "Ireland", "Italy", "Latvia", 
+  "Lithuania", "Luxembourg", "Malta", "Netherlands", "Poland", "Portugal", "Romania", 
+  "Slovakia", "Slovenia", "Spain", "Sweden")
+
+food_consumption <- food_consumption %>%
+  filter(SurveyscountryDESC %in% eu_countries)
+
+glimpse(food_consumption)
+```
+
+Traduïm el nom dels països al català.
+
+```{r message= FALSE, warning=FALSE}
+food_consumption <- food_consumption %>%
+  mutate(CountryCat = case_when(
+    SurveyscountryDESC == "Austria" ~ "Àustria",
+    SurveyscountryDESC == "Belgium" ~ "Bèlgica",
+    SurveyscountryDESC == "Bulgaria" ~ "Bulgària",
+    SurveyscountryDESC == "Croatia" ~ "Croàcia",
+    SurveyscountryDESC == "Cyprus" ~ "Xipre",
+    SurveyscountryDESC == "Czech Republic" ~ "Txèquia",
+    SurveyscountryDESC == "Denmark" ~ "Dinamarca",
+    SurveyscountryDESC == "Estonia" ~ "Estònia",
+    SurveyscountryDESC == "Finland" ~ "Finlàndia",
+    SurveyscountryDESC == "France" ~ "França",
+    SurveyscountryDESC == "Germany" ~ "Alemanya",
+    SurveyscountryDESC == "Greece" ~ "Grècia",
+    SurveyscountryDESC == "Hungary" ~ "Hongria",
+    SurveyscountryDESC == "Ireland" ~ "Irlanda",
+    SurveyscountryDESC == "Italy" ~ "Itàlia",
+    SurveyscountryDESC == "Latvia" ~ "Letònia",
+    SurveyscountryDESC == "Lithuania" ~ "Lituània",
+    SurveyscountryDESC == "Luxembourg" ~ "Luxemburg",
+    SurveyscountryDESC == "Malta" ~ "Malta",
+    SurveyscountryDESC == "Netherlands" ~ "Països Baixos",
+    SurveyscountryDESC == "Poland" ~ "Polònia",
+    SurveyscountryDESC == "Portugal" ~ "Portugal",
+    SurveyscountryDESC == "Romania" ~ "Romania",
+    SurveyscountryDESC == "Slovakia" ~ "Eslovàquia",
+    SurveyscountryDESC == "Slovenia" ~ "Eslovènia",
+    SurveyscountryDESC == "Spain" ~ "Espanya",
+    SurveyscountryDESC == "Sweden" ~ "Suècia",
+    TRUE ~ SurveyscountryDESC))
+```
+
+Creem agrupació de països.
+
+```{r message= FALSE, warning=FALSE}
+food_consumption <- food_consumption %>%
+  mutate(CountryGroup = case_when(
+    SurveyscountryDESC %in% c("Spain", "Italy", "Greece", "Portugal", "Cyprus", "Malta") ~ "Mediterrani",
+    SurveyscountryDESC %in% c("Denmark", "Sweden", "Finland", "Ireland", "Netherlands") ~ "Nordics i Atlàntic",
+    SurveyscountryDESC %in% c("Germany", "France", "Austria", "Belgium", "Luxembourg", "Czech Republic", "Slovakia", "Slovenia", "Croatia") ~ "Europa Central",
+    SurveyscountryDESC %in% c("Poland", "Hungary", "Romania", "Bulgaria", "Estonia", "Latvia", "Lithuania") ~ "Europa de l’Est i Bàltics",
+    TRUE ~ SurveyscountryDESC))
+```
+
+Simplifiquem grups d’edat i traduïm.
+
+```{r message= FALSE, warning=FALSE}
+food_consumption <- food_consumption %>%
+  mutate(PopulationGroupCat = case_when(
+    PopulationGroupL2DESC %in% c("Infants", "Toddlers") ~ "Infants",
+    PopulationGroupL2DESC %in% c("Other children", "Adolescents") ~ "Joves",
+    PopulationGroupL2DESC %in% c("Adults", "Pregnant women", "Lactating women") ~ "Adults",
+    PopulationGroupL2DESC %in% c("Elderly", "Very elderly") ~ "Gent Gran",
+    TRUE ~ PopulationGroupL2DESC))
+```
+
+Simplifiquem grups d'aliments i traduïm.
+
+```{r message= FALSE, warning=FALSE}
+food_consumption <- food_consumption %>%
+  mutate(FoodGroup = case_when(
+    ExposurehierarchyL1DESC %in% c("Meat and meat products", "Eggs and egg products") ~ "Carn i Ous",
+    ExposurehierarchyL1DESC %in% c("Fish, seafood, amphibians, reptiles and invertebrates") ~ "Peix i Marisc",
+    ExposurehierarchyL1DESC %in% c("Milk and dairy products") ~ "Làctics",
+    ExposurehierarchyL1DESC %in% c("Grains and grain-based products", "Starchy roots or tubers and products thereof, sugar plants", "Legumes, nuts, oilseeds and spices") ~ "Cereals, Llegums i Tubercles",
+    ExposurehierarchyL1DESC %in% c("Fruit and fruit products", "Vegetables and vegetable products") ~ "Fruites i Verdures",
+    ExposurehierarchyL1DESC %in% c("Composite dishes", "Seasoning, sauces and condiments", "Other ingredients", "Major isolated ingredients, additives, flavours, baking and processing aids") ~ "Plats Preparats i Productes Compostos",
+    ExposurehierarchyL1DESC %in% c("Alcoholic beverages", "Coffee, cocoa, tea and infusions", "Water and water-based beverages", "Fruit and vegetable juices and nectars (including concentrates)") ~ "Begudes",
+    ExposurehierarchyL1DESC %in% c("Sugar and similar, confectionery and water-based sweet desserts") ~ "Dolços i Postres",
+    ExposurehierarchyL1DESC %in% c("Products for non-standard diets, food imitates and food supplements", "Food products for young population") ~ "Dietètics i Infantils",
+    ExposurehierarchyL1DESC %in% c("Animal and vegetable fats and oils and primary derivatives thereof")  ~ "Greixos Animals i Olis Vegetals",
+    TRUE ~ "Altres"
+  ))
+```
+
+Creem una categoria per distingir si el grup alimentari és saludable o poc recomanable.
+
+```{r message= FALSE, warning=FALSE}
+food_consumption <- food_consumption %>%
+  mutate(
+    NutritionalClassification = case_when(
+      ExposurehierarchyL2DESC %in% c(
+        "Algae and prokaryotes organisms",
+        "Amphibians, reptiles, snails, insects",
+        "Bee-produced fortifying agents",
+        "Bulb vegetables",
+        "Cereals and cereal primary derivatives",
+        "Crustaceans",
+        "Dietary fibre",
+        "Drinking water",
+        "Extracts of plant origin",
+        "Fish (meat)",
+        "Fish offal",
+        "Fish, seafood, amphibians, reptiles and invertebrates",
+        "Flowering brassica",
+        "Flowers used as vegetables",
+        "Fruiting vegetables",
+        "Fruit used as fruit",
+        "Fruit and fruit products",
+        "Fungi, mosses and lichens",
+        "Herbs and edible flowers",
+        "Infant and follow-on formulae",
+        "Isolated proteins and other protein products",
+        "Leafy vegetables",
+        "Legumes",
+        "Legumes with pod",
+        "Liquid or gel separated from plant RPCs",
+        "Meat and dairy imitates",
+        "Molluscs",
+        "Nuts, oilseeds and oilfruits",
+        "Other food for infants and children",
+        "Root and tuber vegetables (excluding starchy- and sugar-)",
+        "Sea urchins and other echinoderms",
+        "Soups and salads",
+        "Spices",
+        "Sprouts, shoots and similar",
+        "Starchy root and tubers",
+        "Starchy roots and tubers",
+        "Starchy root and tuber products",
+        "Stems/stalks eaten as vegetables",
+        "Unprocessed eggs",
+        "Vegetables and vegetable products",
+        "Vitamins",
+        "Water and water-based beverages"
+      ) ~ "Saludable",
+      
+      ExposurehierarchyL2DESC %in% c(
+        "Animal edible offal, non-muscle, other than liver and kidney",
+        "Animal carcase",
+        "Animal kidney",
+        "Animal liver",
+        "Animal meat dried",
+        "Animal blood",
+        "Animal mechanically separated meat (MSM)", 
+        "Animal other slaughtering products",
+        "Bread and similar products",
+        "Breakfast cereals",
+        "Cheese",
+        "Co-factors to metabolism",
+        "Fermented milk or cream",
+        "Fish and seafood processed",
+        "Food for particular diets",
+        "Food supplements and similar preparations",
+        "Hot drinks and similar (coffee, cocoa, tea and herbal infusions)",
+        "Ingredients for coffee, cocoa, tea, and herbal infusions",
+        "Mammals and birds meat",
+        "Meat and meat products",
+        "Meat specialties",
+        "Mechanically separated meat",
+        "Milk and dairy products",
+        "Milk and dairy powders and concentrates",
+        "Milk, whey and cream",
+        "Pasta, doughs and similar products",
+        "Processed cereal-based food for infants and young children",
+        "Processed eggs",
+        "Processed fruit products",
+        "Processed legumes, nuts, oilseeds and spices",
+        "Processed or preserved vegetables and similar",
+        "Starches",
+        "Starchy roots or tubers and products thereof, sugar plants",
+        "Water based beverages"
+      ) ~ "Amb Moderació",
+      
+      ExposurehierarchyL2DESC %in% c(
+        "Animal fresh fat tissues",
+        "Animal and vegetable fats/oils",
+        "Animal and vegetable fats and oils and primary derivatives thereof",
+        "Preserved/processed fat tissues",
+        "Alcoholic beverages",
+        "Artificial sweeteners (e.g., aspartam, saccharine)",
+        "Beer and beer-like beverage",
+        "Beverages concentrates",
+        "Canned-tinned meat",
+        "Chemical elements",
+        "Condiments (including table-top formats)",
+        "Confectionery including chocolate",
+        "Dairy dessert and similar",
+        "Dessert sauces/toppings",
+        "Dishes, incl. Ready to eat meals (excluding soups and salads)",
+        "Fat emulsions and blended fats",
+        "Fine bakery wares",
+        "Food additives other than flavours, colours and artificial sweeteners",
+        "Food flavourings",
+        "Food colours",
+        "Fried or extruded cereal, seed or root-based products",
+        "Fruit / vegetable juices and nectars",
+        "Fruit and vegetable juices and nectars (including concentrates)",
+        "Concentrated or dehydrated fruit/vegetables juices",
+        "Fresh fat tissues",
+        "Marinated meat",
+        "Mixed alcoholic drinks",
+        "Mixed and other not listed condiments",
+        "Miscellaneous agents for food processing",
+        "Maltodextrins and similars",
+        "Products for non-standard diets, food imitates and food supplements",
+        "Processed whole meat products",
+        "Phytochemicals",
+        "Ready-to-eat meal for infants and young children",
+        "Sausages",
+        "Savoury extracts and sauce ingredients",
+        "Seasonings and extracts",
+        "Seasoning, sauces and condiments",
+        "Spoonable desserts and ice creams (generic)",
+        "Sugar and other sweetening ingredients (excluding intensive sweeteners)",
+        "Sugar plants",
+        "Sugar and similar, confectionery and water-based sweet desserts",
+        "Sweetened dairy desserts",
+        "Table-top sweeteners formulations",
+        "Unsweetened spirits and liqueurs",
+        "Water-based sweet desserts",
+        "Wine and wine-like drinks"
+      ) ~ "Poc Recomanable",
+      
+      TRUE ~ "Altres"))
+```
+
+Creem fitxer final per "food_consumption.
+
+```{r message= FALSE, warning=FALSE}
+write.csv(food_consumption, "food_consumption_eu.csv")
+```
+
+Creem un índex de diversitat alimentària basat en el nombre de tipus d'aliments diferents consumits. Excloem els grups amb un consum inferior a 15 g/dia, segons la referència de la FAO, per evitar incloure aliments residuals en els llistats.
+https://openknowledge.fao.org/server/api/core/bitstreams/3da8a8c8-55d4-429b-9455-163713117cfe/content
+
+```{r message= FALSE, warning=FALSE}
+relevant_foods <- food_consumption %>%
+  filter(median_chronic_summary > 15)
+
+diversity_score <- relevant_foods %>%
+  group_by(SurveyscountryDESC, ExposurehierarchyL2DESC) %>%
+  summarise(NutritionalClassification = first(NutritionalClassification), .groups = "drop") %>%
+  group_by(SurveyscountryDESC) %>%
+  summarise(
+    Saludable = sum(NutritionalClassification == "Saludable"),
+    'Amb Moderació' = sum(NutritionalClassification == "Amb Moderació"),
+    'Poc Recomanable' = sum(NutritionalClassification == "Poc Recomanable"),
+    DiversityScore = n()
+  ) %>%
+  arrange(desc(DiversityScore)) %>%
+  ungroup()
+
+diversity_score
+```
+
+Creem fitxer final per "diversity_score".
+
+```{r message= FALSE, warning=FALSE}
+write.csv(diversity_score, "diversity_score_eu.csv")
+```
+
+Càrrega del conjunt de dades “Obesity rate by body mass index”.
+
+```{r message= FALSE, warning=FALSE}
+obesity = read.csv("estat_sdg_02_10_en.csv")
+glimpse(obesity)
+```
+
+Apliquem transformacions (filtrem per obès, l'últim estudi, transformem variables rellevants, agrupem...).
+
+```{r message= FALSE, warning=FALSE}
+obesity <- obesity %>%
+  filter(OBS_VALUE > 0 & bmi == "BMI_GE30" & (TIME_PERIOD == 2022 | TIME_PERIOD == 2019))
+
+obesity <- obesity %>%
+  mutate(geo = as.factor(geo))
+
+obesity <- obesity %>%
+  mutate(CountryCat = case_when(
+    geo == "AT" ~ "Àustria",
+    geo == "BE" ~ "Bèlgica",
+    geo == "BG" ~ "Bulgària",
+    geo == "HR" ~ "Croàcia",
+    geo == "CY" ~ "Xipre",
+    geo == "CZ" ~ "Txèquia",
+    geo == "DK" ~ "Dinamarca",
+    geo == "EE" ~ "Estònia",
+    geo == "FI" ~ "Finlàndia",
+    geo == "FR" ~ "França",
+    geo == "DE" ~ "Alemanya",
+    geo == "GR" ~ "Grècia",
+    geo == "HU" ~ "Hongria",
+    geo == "IE" ~ "Irlanda",
+    geo == "IT" ~ "Itàlia",
+    geo == "LV" ~ "Letònia",
+    geo == "LT" ~ "Lituània",
+    geo == "LU" ~ "Luxemburg",
+    geo == "MT" ~ "Malta",
+    geo == "NL" ~ "Països Baixos",
+    geo == "PL" ~ "Polònia",
+    geo == "PT" ~ "Portugal",
+    geo == "RO" ~ "Romania",
+    geo == "SK" ~ "Eslovàquia",
+    geo == "SI" ~ "Eslovènia",
+    geo == "ES" ~ "Espanya",
+    geo == "SE" ~ "Suècia",
+    TRUE ~ NA_character_))
+
+obesity <- obesity %>%
+  filter(!is.na(CountryCat) & CountryCat != "")
+
+obesity <- obesity %>%
+  group_by(CountryCat) %>%
+  summarize(mean_obs_value = mean(OBS_VALUE, na.rm = TRUE)) %>%
+  ungroup()
+```
+
+Creem fitxer final per "obesity".
+
+```{r message= FALSE, warning=FALSE}
+write.csv(obesity, "obesity_eu.csv")
+```
